@@ -7,6 +7,11 @@ from xml.etree import ElementTree
 import argparse
 import errno
 import sys
+from io import BytesIO
+from PIL import Image
+import requests
+import os
+
 
 '''
 This module supports grabbing information from the board game geek website (https://boardgamegeek.com/),
@@ -17,6 +22,7 @@ grabbed and saved out, user can call get from api to fill out all details
 - call ScrapeRanks, this should take a while (~10 min) and gets the urls and rank of all games from the site
 - call GetFromApi, this should also take a while (~10 min) and gets the remaining information through API calls
 '''
+
 
 # for whatever reason this game has no rank and is missing data, could add code to delete, or whack manually
 # https://boardgamegeek.com/boardgame/57161/showdown
@@ -33,6 +39,7 @@ tag_col_lookup = [('name', 'names'),
                  ('statistics/ratings/bayesaverage', 'geek_rating'),
                  ('statistics/ratings/usersrated', 'num_votes'),
                  ('image', 'image_url'),
+                 ('thumbnail', 'thumb_url'),
                  ('age', 'age'),
                  ('boardgamemechanic', 'mechanic'),
                  ('statistics/ratings/owned', 'owned'),
@@ -42,7 +49,7 @@ tag_col_lookup = [('name', 'names'),
                  ('statistics/ratings/averageweight', 'weight')]
 
 
-def ScrapeRanks(page_start=1, page_end=51, tags_cols=tag_col_lookup, output_name='bgg_db.csv'):
+def ScrapeRanks(page_start=1, page_end=51, tags_cols=tag_col_lookup):
     '''
     :param page_start: which page to start grabbing data from (1 is first page)
     :param page_end: which page to stop grabbing data from (not inclusive, 51 should be the stop point)
@@ -74,29 +81,31 @@ def ScrapeRanks(page_start=1, page_end=51, tags_cols=tag_col_lookup, output_name
             rank_list.append(tempo)
         time.sleep(5)
 
-    str_names = ['names', 'image_url', 'mechanic', 'category', 'designer', 'publisher']
+    str_names = ['names', 'image_url', 'thumb_url', 'mechanic', 'category', 'designer', 'publisher']
     df_dict = {'bgg_url':bgg_url, 'game_id':game_id}
     df = pandas.DataFrame(df_dict, index=rank_list).rename_axis('rank')
     for tag, col in tags_cols:
         df[col] = 'x' if col in str_names else np.nan
-    df.to_csv(output_name)
+    path = os.path.join(args.out_path, args.out_name)
+    df.to_csv(path)
 
 
-# https://www.boardgamegeek.com/xmlapi
-def GetFromApi(loops=100, tags_cols=tag_col_lookup, name_in='bgg_db.csv', name_out='bgg_db.csv'):
+def GetFromApi(loops=100, tags_cols=tag_col_lookup):
     '''
     :param loops: how many games to try and grab, advised to do 100, 50 times
+    https://www.boardgamegeek.com/xmlapi
     :param tags_cols: 
     :param name_in: 
     :param name_out: 
     '''
-    df = pandas.read_csv(name_in, encoding='utf8')
-    # batch up a bunch of ids so we don't have to do so many api calls
+
+    path = os.path.join(args.out_path, args.out_name)
+    df = pandas.read_csv(path, encoding='utf8')
+    # search through df for null entries, add these to batch list
     ids_todo = []
     for index, row in df.iterrows():
-        if (len(ids_todo) >= loops):
+        if len(ids_todo) >= loops:
             break
-        # row must be empty
         if np.isnan(row['min_players']):
             ids_todo.append(str(row['game_id']))
     url = 'https://www.boardgamegeek.com/xmlapi/boardgame/{}?&stats=1&marketplace=1'.format(','.join(ids_todo))
@@ -104,7 +113,7 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup, name_in='bgg_db.csv', name_o
     response = requests.get(url)
     if response.status_code != 200:
         print('Problem grabbing from API:  {}'.format(response.status_code))
-        quit()
+        sys.exit(1)
 
     # these tags will return multiple results, will need to be handled slightly differently
     multi_tags = ['mechanic', 'category', 'designer']
@@ -114,27 +123,42 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup, name_in='bgg_db.csv', name_o
         print('Inserting id:{}'.format(id))
         df_index = df[df['game_id'] == int(id)].index
         for tag, var in tags_cols:
+            # special case for grabbing english name
             if var == 'names':
                 for sub in game.findall(tag):
                     if 'primary' in sub.attrib: #grab the english name
                         df.set_value(df_index, var, sub.text if sub != None else 'none')
                         break
+            # multi tag items need to be handled slightly different
             elif var in multi_tags:
                 multi = []
                 for sub in game.findall(tag):
                     multi.append(sub.text if sub != None else 'none')
                 df.set_value(df_index, var, ', '.join(multi) if len(multi) else 'none')
+            # all normal nodes handled here
             else:
                 node = game.find(tag)
                 df.set_value(df_index, var, node.text if node != None else 'none')
-    df.to_csv(name_out, index=False)
-    time.sleep(5)
+
+    # save results out
+    path = os.path.join(args.out_path, args.out_name)
+    df.to_csv(path, index=False)
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Collects information for the top 5K games on BGG')
-    parser.add_argument('-s', '--scrape', dest='do_scrape', type=bool, default=False, help='True, or skip entirely for False')
-    parser.add_argument('-a', '--api', dest='api_grabs', type=int, default=0, help='how many groups of 100 to grab')
+    parser.add_argument('-s', '--scrape', dest='do_scrape', action='store_true', help='Specify if you want to scrape')
+    parser.add_argument('-a', '--api', dest='api_grabs', type=int, default=0, help='how many groups of 100 to grab, keep doing this until db full')
     args = parser.parse_args()
+
+    # add extra useful stuff
+    path = os.path.join(args.log_path, 'run.log')
+    with open(path, 'a') as f:
+        arg_str = ' '.join(sys.argv)
+        sep = '-' * 80
+        out_str = f'{arg_str}\n{sep}\n'
+        f.write(out_str)
 
     # validate input
     if not 0 <= args.api_grabs <= 50:
@@ -146,3 +170,5 @@ if __name__ == '__main__':
     
     for i in range(args.api_grabs):
         GetFromApi()
+        time.sleep(5)
+
