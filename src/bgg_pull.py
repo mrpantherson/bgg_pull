@@ -161,7 +161,7 @@ def VizIt(args):
         pic_req = requests.get(item)
         im = Image.open(BytesIO(pic_req.content))
         pic_w, pic_h = im.size
-        new_im.paste(im, (0, 0))
+        new_im.paste(im, (_x, _y))
         _x += pic_w + 10
         if index % args.n_cols == 0 and index > 0:
             _y += args.thumb_w
@@ -180,10 +180,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # add extra useful stuff
-    args.thumb_w = 85
-    args.thumb_h = 65
-    args.n_rows = 3
-    args.n_cols = 3
+    args.thumb_w = 150
+    args.thumb_h = 150
+    args.n_rows = 10
+    args.n_cols = 10
     args.n_total = args.n_rows * args.n_cols
     args.out_width = args.n_cols * args.thumb_w
     args.out_height = args.n_rows * args.thumb_h
