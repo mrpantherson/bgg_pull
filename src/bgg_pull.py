@@ -145,6 +145,32 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
     df.to_csv(path, index=False)
 
 
+def VizIt(args):
+    """ This function generates a viz using pictures of top rated board games
+    
+    Arguments:
+        args -- command line arguments
+    """
+    path = os.path.join(args.out_path, args.out_name)
+    df = pandas.read_csv(path)
+    df = df.loc[:args.n_total, 'thumb_url']
+
+    _x, _y = 0, 0
+    new_im = Image.new('RGB', (args.out_width, args.out_height))
+    for index, item in enumerate(df):
+        pic_req = requests.get(item)
+        im = Image.open(BytesIO(pic_req.content))
+        pic_w, pic_h = im.size
+        new_im.paste(im, (0, 0))
+        _x += pic_w + 10
+        if index % args.n_cols == 0 and index > 0:
+            _y += args.thumb_w
+            _x = 0
+        time.sleep(5)
+
+    path = os.path.join(args.out_path, args.viz_name)
+    new_im.save(path)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Collects information for the top 5K games on BGG')
@@ -172,3 +198,5 @@ if __name__ == '__main__':
         GetFromApi()
         time.sleep(5)
 
+    if args.do_viz:
+        VizIt(args)
