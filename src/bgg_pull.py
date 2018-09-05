@@ -176,9 +176,22 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Collects information for the top 5K games on BGG')
     parser.add_argument('-s', '--scrape', dest='do_scrape', action='store_true', help='Specify if you want to scrape')
     parser.add_argument('-a', '--api', dest='api_grabs', type=int, default=0, help='how many groups of 100 to grab, keep doing this until db full')
+    parser.add_argument('-v', '--viz', dest='do_viz', action='store_true', help='Specify if you want to generate viz')
     args = parser.parse_args()
 
     # add extra useful stuff
+    args.thumb_w = 85
+    args.thumb_h = 65
+    args.n_rows = 3
+    args.n_cols = 3
+    args.n_total = args.n_rows * args.n_cols
+    args.out_width = args.n_cols * args.thumb_w
+    args.out_height = args.n_rows * args.thumb_h
+    args.out_name = 'bgg_db.csv'
+    args.viz_name = 'bgg_top100.png'
+    args.log_path = '../log/'
+    args.out_path = '../out/'
+
     path = os.path.join(args.log_path, 'run.log')
     with open(path, 'a') as f:
         arg_str = ' '.join(sys.argv)
