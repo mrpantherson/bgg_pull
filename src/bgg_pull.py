@@ -11,6 +11,7 @@ from io import BytesIO
 from PIL import Image
 import requests
 import os
+import logging
 
 
 '''
@@ -58,7 +59,7 @@ def ScrapeRanks(page_start=1, page_end=51, tags_cols=tag_col_lookup):
     '''
     game_id, rank_list, bgg_url = [], [], []
     for index in range(page_start, page_end):
-        print("Scraping Page: {}".format(index))
+        args.logger.info(f'Grabbing page {index}')
         url = "https://boardgamegeek.com/search/boardgame/page/{}?sort=rank&advsearch=1&q=&include%5Bdesignerid%5D=&include" \
               "%5Bpublisherid%5D=&geekitemname=&range%5Byearpublished%5D%5Bmin%5D=&range%5Byearpublished%5D%5Bmax%5D=&range%5B" \
               "minage%5D%5Bmax%5D=&range%5Bnumvoters%5D%5Bmin%5D=&range%5Bnumweights%5D%5Bmin%5D=&range%5Bminplayers%5D%5Bmax%" \
@@ -109,10 +110,10 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
         if np.isnan(row['min_players']):
             ids_todo.append(str(row['game_id']))
     url = 'https://www.boardgamegeek.com/xmlapi/boardgame/{}?&stats=1&marketplace=1'.format(','.join(ids_todo))
-    print('Grabbing info from {}'.format(url))
+    args.logger.info(f'Grabbing info from {url}')
     response = requests.get(url)
     if response.status_code != 200:
-        print('Problem grabbing from API:  {}'.format(response.status_code))
+        args.logger.error(f'Problem grabbing from API:  {response.status_code}')
         sys.exit(1)
 
     # these tags will return multiple results, will need to be handled slightly differently
@@ -120,7 +121,7 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
     tree = ElementTree.fromstring(response.content)
     for game in tree:
         id = game.attrib['objectid']
-        print('Inserting id:{}'.format(id))
+        args.logger.info(f'Inserting id: {id}')
         df_index = df[df['game_id'] == int(id)].index
         for tag, var in tags_cols:
             # special case for grabbing english name
@@ -192,6 +193,21 @@ if __name__ == '__main__':
     args.log_path = '../log/'
     args.out_path = '../out/'
 
+    # critical - error - warning - info - debug
+    args.logger = logging.getLogger(__name__)
+    args.logger.setLevel(logging.DEBUG)
+    # file
+    path = os.path.join(args.log_path, 'error.log')
+    fh = logging.FileHandler(path, mode='w')
+    fh.setLevel(logging.WARNING)
+    args.logger.addHandler(fh)
+    # console
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.INFO)
+    args.logger.addHandler(sh)
+
+
+    # save run log
     path = os.path.join(args.log_path, 'run.log')
     with open(path, 'a') as f:
         arg_str = ' '.join(sys.argv)
@@ -201,15 +217,18 @@ if __name__ == '__main__':
 
     # validate input
     if not 0 <= args.api_grabs <= 50:
-        print('invalid value for api_grabs [0, 50]')
+        args.logger.error('invalid value for api_grabs [0, 50]')
         sys.exit(1)
 
     if args.do_scrape:
+        args.logger.info('Begining scrape')
         ScrapeRanks()
     
     for i in range(args.api_grabs):
+        args.logger.info(f'Api grab {i}')
         GetFromApi()
         time.sleep(5)
 
     if args.do_viz:
+        args.logger.info('Generating viz')
         VizIt(args)
