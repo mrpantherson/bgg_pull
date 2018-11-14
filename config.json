@@ -1,0 +1,12 @@
+{
+	"file_name": "config.json",
+	"out_path": "../out/",
+    "log_path": "../log/",
+    "nice_time": 5,
+    "out_name":"bgg_db.csv",
+    "viz_name":"bgg_top100.png",
+    "thumb_w": 150,
+    "thumb_h": 150,
+    "n_rows": 10,
+    "n_cols": 10
+}

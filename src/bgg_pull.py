@@ -12,6 +12,7 @@ from PIL import Image
 import requests
 import os
 import logging
+import json
 
 
 '''
@@ -119,9 +120,9 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
     # these tags will return multiple results, will need to be handled slightly differently
     multi_tags = ['mechanic', 'category', 'designer']
     tree = ElementTree.fromstring(response.content)
+    args.logger.info('Inserting games')
     for game in tree:
         id = game.attrib['objectid']
-        args.logger.info(f'Inserting id: {id}')
         df_index = df[df['game_id'] == int(id)].index
         for tag, var in tags_cols:
             # special case for grabbing english name
@@ -181,39 +182,38 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # add extra useful stuff
-    args.thumb_w = 150
-    args.thumb_h = 150
-    args.n_rows = 10
-    args.n_cols = 10
+    args.cfgpath = "../config.json"
+    with open(args.cfgpath, 'r') as file:
+        args.config = json.load(file)
+    args.thumb_w = args.config['thumb_w']
+    args.thumb_h = args.config['thumb_h']
+    args.n_rows = args.config['n_rows']
+    args.n_cols = args.config['n_cols']
     args.n_total = args.n_rows * args.n_cols
     args.out_width = args.n_cols * args.thumb_w
     args.out_height = args.n_rows * args.thumb_h
-    args.out_name = 'bgg_db.csv'
-    args.viz_name = 'bgg_top100.png'
-    args.log_path = '../log/'
-    args.out_path = '../out/'
+    args.out_name = args.config['out_name']
+    args.viz_name = args.config['viz_name']
+    args.log_path = args.config['log_path']
+    args.out_path = args.config['out_path']
 
     # critical - error - warning - info - debug
     args.logger = logging.getLogger(__name__)
     args.logger.setLevel(logging.DEBUG)
-    # file
-    path = os.path.join(args.log_path, 'error.log')
-    fh = logging.FileHandler(path, mode='w')
-    fh.setLevel(logging.WARNING)
+    # file handler
+    path = os.path.join(args.log_path, 'log.txt')
+    fh = logging.FileHandler(path, mode='a')
+    fh.setLevel(logging.INFO)
     args.logger.addHandler(fh)
-    # console
+    # console handler
     sh = logging.StreamHandler()
     sh.setLevel(logging.INFO)
     args.logger.addHandler(sh)
 
-
-    # save run log
-    path = os.path.join(args.log_path, 'run.log')
-    with open(path, 'a') as f:
-        arg_str = ' '.join(sys.argv)
-        sep = '-' * 80
-        out_str = f'{arg_str}\n{sep}\n'
-        f.write(out_str)
+    # log run commands 
+    sep = '-' * 80
+    arg_str = ' '.join(sys.argv)
+    args.logger.info(f'{sep}\npython {arg_str}\n')
 
     # validate input
     if not 0 <= args.api_grabs <= 50:
