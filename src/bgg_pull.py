@@ -110,7 +110,7 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
             break
         if np.isnan(row['min_players']):
             ids_todo.append(str(row['game_id']))
-    url = 'https://www.boardgamegeek.com/xmlapi/boardgame/{}?&stats=1&marketplace=1'.format(','.join(ids_todo))
+    url = 'https://www.boardgamegeek.com/xmlapi/boardgame/{}?&stats=1'.format(','.join(ids_todo))
     args.logger.info(f'Grabbing info from {url}')
     response = requests.get(url)
     if response.status_code != 200:
@@ -129,18 +129,18 @@ def GetFromApi(loops=100, tags_cols=tag_col_lookup):
             if var == 'names':
                 for sub in game.findall(tag):
                     if 'primary' in sub.attrib: #grab the english name
-                        df.set_value(df_index, var, sub.text if sub != None else 'none')
+                        df.at[df_index, var] = sub.text if sub else 'none'
                         break
             # multi tag items need to be handled slightly different
             elif var in multi_tags:
                 multi = []
                 for sub in game.findall(tag):
-                    multi.append(sub.text if sub != None else 'none')
-                df.set_value(df_index, var, ', '.join(multi) if len(multi) else 'none')
+                    multi.append(sub.text if sub else 'none')
+                df.at[df_index, var] = ', '.join(multi) if len(multi) else 'none'
             # all normal nodes handled here
             else:
                 node = game.find(tag)
-                df.set_value(df_index, var, node.text if node != None else 'none')
+                df.at[df_index, var] = node.text if node else 'none'
 
     # save results out
     path = os.path.join(args.out_path, args.out_name)
